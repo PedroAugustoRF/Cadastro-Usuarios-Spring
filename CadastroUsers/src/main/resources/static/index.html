@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Usuários</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='28' fill='%233446d0'/%3E%3Ccircle cx='50' cy='38' r='16' fill='white'/%3E%3Cpath d='M22 80c4-16 16-22 28-22s24 6 28 22z' fill='white'/%3E%3C/svg%3E">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+
+  <!-- app.js precisa vir antes do Alpine (ambos com defer mantêm a ordem) -->
+  <script src="app.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js" defer></script>
+</head>
+
+<body x-data="usuarios">
+  <header class="topo">
+    <h1>Usuários</h1>
+    <p class="resumo" x-text="carregando ? 'Carregando…' : resumo"></p>
+  </header>
+
+  <main class="layout">
+    <!-- Formulário -->
+    <section class="painel" aria-labelledby="titulo-form">
+      <h2 id="titulo-form" x-text="editando ? 'Editar usuário' : 'Novo usuário'"></h2>
+
+      <form @submit.prevent="salvar" novalidate>
+        <div class="campo">
+          <label for="nome">Nome</label>
+          <input id="nome" x-ref="nome" x-model="form.nome" type="text"
+                 autocomplete="off" maxlength="100" placeholder="Ex.: Maria Souza"
+                 :aria-invalid="!!erros.nome" aria-describedby="erro-nome">
+          <p class="erro-campo" id="erro-nome" x-show="erros.nome" x-text="erros.nome"></p>
+        </div>
+
+        <div class="campo">
+          <label for="idade">Idade</label>
+          <input id="idade" x-model="form.idade" type="number" inputmode="numeric"
+                 min="0" max="150" placeholder="Ex.: 28"
+                 :aria-invalid="!!erros.idade" aria-describedby="erro-idade">
+          <p class="erro-campo" id="erro-idade" x-show="erros.idade" x-text="erros.idade"></p>
+        </div>
+
+        <div class="acoes-form">
+          <button type="submit" class="btn btn-primario" :disabled="salvando"
+                  x-text="salvando ? 'Salvando…' : (editando ? 'Salvar alterações' : 'Adicionar usuário')"></button>
+          <button type="button" class="btn btn-secundario" x-show="editando" @click="cancelar">Cancelar</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Lista -->
+    <section class="lista-area" aria-labelledby="titulo-lista">
+      <h2 id="titulo-lista" class="sr-only">Lista de usuários</h2>
+
+      <div class="busca">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" x-model="busca" placeholder="Buscar por nome" aria-label="Buscar por nome">
+      </div>
+
+      <!-- Carregando -->
+      <ul class="lista" x-show="carregando" aria-hidden="true">
+        <template x-for="i in 3" :key="i">
+          <li class="item esqueleto"><span class="avatar"></span><span class="linha"></span></li>
+        </template>
+      </ul>
+
+      <!-- Erro -->
+      <div class="estado" x-show="!carregando && erro" x-cloak>
+        <p class="estado-titulo">Não foi possível carregar os usuários</p>
+        <p class="estado-texto" x-text="erro"></p>
+        <button class="btn btn-secundario" @click="carregar">Tentar de novo</button>
+      </div>
+
+      <!-- Vazio -->
+      <div class="estado" x-show="!carregando && !erro && lista.length === 0" x-cloak>
+        <p class="estado-titulo">Nenhum usuário ainda</p>
+        <p class="estado-texto">Preencha o formulário para cadastrar o primeiro.</p>
+      </div>
+
+      <!-- Sem resultado na busca -->
+      <div class="estado" x-show="!carregando && !erro && lista.length > 0 && filtrada.length === 0" x-cloak>
+        <p class="estado-titulo">Nada encontrado</p>
+        <p class="estado-texto">Nenhum nome contém “<span x-text="busca"></span>”.</p>
+      </div>
+
+      <!-- Itens -->
+      <ul class="lista" x-show="!carregando && !erro && filtrada.length > 0" x-cloak>
+        <template x-for="u in filtrada" :key="u.id">
+          <li class="item" :class="{ 'em-edicao': form.id === u.id }">
+            <span class="avatar" :style="`--h:${matiz(u)}`" aria-hidden="true" x-text="iniciais(u)"></span>
+            <div class="dados">
+              <p class="nome" x-text="u.nome"></p>
+              <p class="idade" x-text="u.idade != null ? u.idade + (u.idade === 1 ? ' ano' : ' anos') : 'Idade não informada'"></p>
+            </div>
+            <div class="botoes">
+              <button class="icone" @click="editar(u)" :aria-label="'Editar ' + u.nome" title="Editar">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg>
+              </button>
+              <button class="icone perigo" @click="pedirExclusao(u)" :aria-label="'Excluir ' + u.nome" title="Excluir">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/></svg>
+              </button>
+            </div>
+          </li>
+        </template>
+      </ul>
+    </section>
+  </main>
+
+  <!-- Confirmação de exclusão -->
+  <dialog x-ref="dialogo" class="dialogo" @close="aExcluir = null">
+    <h2>Excluir usuário?</h2>
+    <p>
+      <strong x-text="aExcluir?.nome"></strong> será removido do banco de dados.
+      Essa ação não pode ser desfeita.
+    </p>
+    <div class="acoes-form">
+      <button class="btn btn-perigo" @click="excluir" :disabled="salvando">Excluir</button>
+      <button class="btn btn-secundario" @click="$refs.dialogo.close()">Cancelar</button>
+    </div>
+  </dialog>
+
+  <!-- Aviso rápido -->
+  <div class="toast-area" role="status" aria-live="polite">
+    <div class="toast" :class="toast.tipo" x-show="toast.msg" x-text="toast.msg"
+         x-transition.opacity.duration.200ms x-cloak></div>
+  </div>
+</body>
+</html>
